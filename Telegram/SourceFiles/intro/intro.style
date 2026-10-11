@@ -25,6 +25,8 @@ introCoverIconLeft: 50px;
 introCoverIconTop: 46px;
 
 introSettingsSkip: 10px;
+introGlassBorder: 1px;
+introGlassFragmentIcon: icon{{ "fragment", windowFg }};
 
 introPhotoTop: 10px;
 

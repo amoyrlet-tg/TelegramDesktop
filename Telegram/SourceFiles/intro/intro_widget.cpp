@@ -48,10 +48,97 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_intro.h"
 #include "base/qt/qt_common_adapters.h"
 
+#include <QtGui/QLinearGradient>
+#include <QtGui/QResizeEvent>
+
 namespace Intro {
 namespace {
 
 using namespace ::Intro::details;
+
+constexpr auto kGlassHoverDuration = crl::time(160);
+
+class GlassButton final : public Ui::RoundButton {
+public:
+	GlassButton(
+		QWidget *parent,
+		rpl::producer<QString> text,
+		const style::RoundButton &st)
+	: Ui::RoundButton(parent, std::move(text), st)
+	, _attention(&st == &st::introResetButton) {
+		setFullRadius(true);
+		if (&st == &st::introFragmentButton) {
+			setIconOverride(&st::introGlassFragmentIcon);
+		}
+		style::PaletteChanged(
+		) | rpl::on_next([=] {
+			refreshMaterial();
+		}, lifetime());
+		refreshMaterial();
+	}
+
+protected:
+	void resizeEvent(QResizeEvent *e) override {
+		Ui::RoundButton::resizeEvent(e);
+		refreshMaterial();
+	}
+
+	void onStateChanged(State was, StateChangeSource source) override {
+		Ui::RoundButton::onStateChanged(was, source);
+		const auto from = _hover.value(_hoverTarget);
+		_hoverTarget = (isOver() && !isDisabled()) ? 1. : 0.;
+		_hover.start([=] {
+			refreshMaterial();
+		}, from, _hoverTarget, kGlassHoverDuration);
+		refreshMaterial();
+	}
+
+private:
+	void refreshMaterial() {
+		const auto over = _hover.value(_hoverTarget);
+		const auto pressed = isDown() ? 1. : 0.;
+		const auto dark = st::windowBg->c.lightnessF() < 0.5;
+		const auto alpha = isDisabled() ? 0.4 : 1.;
+		const auto accent = _attention
+			? st::attentionButtonFg->c
+			: st::windowActiveTextFg->c;
+		const auto tinted = [&](QColor color, double opacity) {
+			color.setAlphaF(opacity * alpha);
+			return color;
+		};
+		auto fill = QLinearGradient(0., 0., width() * 0.15, height());
+		fill.setColorAt(0., tinted(
+			QColor(Qt::white),
+			(dark ? 0.16 : 0.72) + over * 0.08 - pressed * 0.06));
+		fill.setColorAt(0.45, tinted(accent, 0.09 + over * 0.06));
+		fill.setColorAt(1., tinted(accent, 0.18 + over * 0.08));
+		setBrushOverride(QBrush(fill));
+
+		auto rim = QLinearGradient(0., 0., width() * 0.25, height());
+		rim.setColorAt(0., tinted(
+			dark ? QColor(Qt::white) : accent,
+			dark ? 0.5 : 0.32));
+		rim.setColorAt(0.5, tinted(accent, 0.16 + over * 0.12));
+		rim.setColorAt(1., tinted(accent, 0.38 + over * 0.12));
+		setPenOverride(QPen(QBrush(rim), st::introGlassBorder));
+		setRippleOverride(tinted(accent, 0.16));
+		setTextFgOverride(tinted(
+			_attention ? st::attentionButtonFg->c : st::windowFg->c,
+			1.));
+	}
+
+	const bool _attention = false;
+	double _hoverTarget = 0.;
+	Ui::Animations::Simple _hover;
+
+};
+
+[[nodiscard]] object_ptr<Ui::RoundButton> MakeGlassButton(
+		QWidget *parent,
+		rpl::producer<QString> text,
+		const style::RoundButton &st) {
+	return object_ptr<GlassButton>(parent, std::move(text), st);
+}
 
 [[nodiscard]] QString ComputeNewAccountCountry() {
 	if (const auto parent
@@ -85,13 +172,13 @@ Widget::Widget(
 , _back(this, object_ptr<Ui::IconButton>(this, st::introBackButton))
 , _settings(
 	this,
-	object_ptr<Ui::RoundButton>(
+	MakeGlassButton(
 		this,
 		tr::lng_menu_settings(),
 		st::defaultBoxButton))
 , _next(
 	this,
-	object_ptr<Ui::RoundButton>(this, nullptr, *_nextStyle))
+	MakeGlassButton(this, nullptr, *_nextStyle))
 , _connecting(std::make_unique<Window::ConnectionState>(
 		this,
 		account,
@@ -320,7 +407,7 @@ void Widget::checkUpdateStatus() {
 		if (_update) return;
 		_update.create(
 			this,
-			object_ptr<Ui::RoundButton>(
+			MakeGlassButton(
 				this,
 				tr::lng_menu_update(),
 				st::defaultBoxButton));
@@ -359,7 +446,7 @@ void Widget::setupStep() {
 			_next.destroy();
 			_next.create(
 				this,
-				object_ptr<Ui::RoundButton>(this, nullptr, *nextStyle));
+				MakeGlassButton(this, nullptr, *nextStyle));
 			showControls();
 			updateControlsGeometry();
 			_next->toggle(wasShown, anim::type::instant);
@@ -498,7 +585,7 @@ void Widget::appendStep(Step *step) {
 
 void Widget::showResetButton() {
 	if (!_resetAccount) {
-		auto entity = object_ptr<Ui::RoundButton>(
+		auto entity = MakeGlassButton(
 			this,
 			tr::lng_signin_reset_account(),
 			st::introResetButton);
