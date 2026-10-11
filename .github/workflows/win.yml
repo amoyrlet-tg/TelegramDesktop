@@ -228,6 +228,35 @@ jobs:
         shell: bash
         run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/tdesktop_rust/out/src/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path '*/nv-codec-headers/*' ')' -type f ')' -o -empty ')' -delete
 
+      - name: Redirect x64 build output to D drive.
+        shell: pwsh
+        run: |
+          $repoRoot = Join-Path (Join-Path $env:USERPROFILE 'TBuild') $env:REPO_NAME
+          $outputLink = Join-Path $repoRoot 'out'
+          $outputTarget = Join-Path $env:GITHUB_WORKSPACE '_win64_output'
+
+          Write-Host "=== DISK SPACE ==="
+          Get-PSDrive -PSProvider FileSystem |
+            Select-Object Name, @{Name='FreeGiB';Expression={[math]::Round($_.Free / 1GB, 1)}} |
+            Format-Table
+
+          if ([IO.Path]::GetPathRoot($repoRoot) -eq [IO.Path]::GetPathRoot($outputTarget)) {
+            throw 'Output must be on a different drive.'
+          }
+
+          if (-not (Test-Path -LiteralPath $repoRoot -PathType Container)) {
+            throw "Repository directory missing: $repoRoot"
+          }
+
+          if (Test-Path -LiteralPath $outputLink) {
+            throw "Output directory already exists: $outputLink"
+          }
+
+          New-Item -ItemType Directory -Path $outputTarget -Force | Out-Null
+          New-Item -ItemType Junction -Path $outputLink -Target $outputTarget | Out-Null
+
+          Write-Host "Build output redirected: $outputLink -> $outputTarget"
+
       - name: Telegram Desktop build.
         if: env.ONLY_CACHE == 'false'
         run: |
