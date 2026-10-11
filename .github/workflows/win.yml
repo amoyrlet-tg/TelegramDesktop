@@ -53,9 +53,9 @@ jobs:
 
     strategy:
       matrix:
-        arch: [x64_x86, x64, arm64]
-        qt: ["", qt6]
-        generator: ["", "Ninja Multi-Config"]
+        arch: [x64]
+        qt: [""]
+        generator: [""]
         exclude:
           - arch: arm64
             qt: ""
@@ -167,6 +167,15 @@ jobs:
         run: |
           %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent ${{ matrix.qt }}
 
+      - name: Repair missing Rust sources.
+        shell: cmd
+        run: |
+          if not exist "%LibrariesPath%\tdesktop_rust\out\src\wallet_engine\wallet_engine.cpp" (
+            echo Rebuilding missing wallet_engine.cpp
+            call "%TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat" skip-release silent tlottie wallet-engine tdesktop_rust
+            if errorlevel 1 exit /b 1
+          )
+          if not exist "%LibrariesPath%\tdesktop_rust\out\src\wallet_engine\wallet_engine.cpp" exit /b 1
       - name: Read configuration matrix.
         shell: bash
         run: |
